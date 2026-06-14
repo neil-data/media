@@ -1,4 +1,5 @@
 services:
+  # Your Backend Service
   - type: web
     name: deadsat-backend
     runtime: python
@@ -15,3 +16,20 @@ services:
       - key: PYTHON_VERSION
         value: "3.11.0"
     healthCheckPath: /health
+
+  # Your Frontend Service (Add this right underneath)
+  - type: web
+    name: deadsat-frontend
+    runtime: static
+    rootDir: remix_-orbital-recovery-unit
+    buildCommand: npm install && npm run build
+    publishPath: dist
+    envVars:
+      - key: VITE_WS_URL
+        # Once your backend deploys, put its Render URL here (use wss:// instead of https://)
+        value: "wss://deadsat-backend.onrender.com"
+    routes:
+      # This forces Render to route all paths to index.html so React Router doesn't 404
+      - type: rewrite
+        source: /*
+        destination: /index.html
