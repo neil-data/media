@@ -1,0 +1,128 @@
+# ──────────────────────────────────────────────
+# DeadSat Resurrection — .gitignore
+# ──────────────────────────────────────────────
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+.Python
+env/
+venv/
+.venv/
+ENV/
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Environment & Secrets
+.env
+.env.local
+.env.*.local
+*.env
+!.env.example
+
+# API Keys — never commit these
+ml_dsa_public.bin
+ed25519_public.bin
+*.pem
+*.key
+*.p12
+
+# Crypto ledger & nonce stores (Pi-specific)
+ledger.db
+nonce_store.db
+test_ledger.db
+test_nonce_store.db
+test_rogue_ledger.db
+test_rogue_nonce.db
+*.db
+
+# Recovery logs (auto-generated)
+recovery_logs/
+
+# Node.js / Frontend
+node_modules/
+.npm
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+dist/
+.next/
+out/
+.nuxt/
+.cache/
+.parcel-cache/
+
+# Vite
+dist-ssr/
+*.local
+
+# VS Code
+.vscode/
+!.vscode/extensions.json
+*.code-workspace
+.history/
+
+# PyRight / Pylance
+pyrightconfig.json
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V1
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# Jupyter
+.ipynb_checkpoints
+*.ipynb
+
+# Training data outputs (large files)
+*.pt
+*.pth
+*.ckpt
+*.h5
+*.pkl
+*.joblib
+
+# Logs
+*.log
+logs/
+*.log.*
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# RTL-SDR captures (large binary files)
+*.bin
+*.iq
+*.wav
+*.raw
+!crypto/ml_dsa_public.bin
+!crypto/ed25519_public.bin
+
+# Temporary files
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+
+# Docker (if added later)
+.dockerignore
+
+# Pi-specific
+*.pyc
