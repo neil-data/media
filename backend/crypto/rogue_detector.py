@@ -17,10 +17,10 @@ logging.basicConfig(
 logger = logging.getLogger('rogue_detector')
 
 SEVERITY = {
-    'UNSIGNED_COMMAND':   'critical',
+    'UNSIGNED_COMMAND': 'critical',
     'SIGNATURE_MISMATCH': 'critical',
-    'REPLAY_ATTACK':      'critical',
-    'UNKNOWN_COMMAND':    'medium',
+    'REPLAY_ATTACK': 'critical',
+    'UNKNOWN_COMMAND': 'medium',
 }
 
 
@@ -28,35 +28,86 @@ class RogueDetector:
 
     def __init__(self, ledger_db_path, nonce_db_path=NONCE_DB_PATH):
         self.lock = threading.Lock()
-        self.ledger_conn = sqlite3.connect(ledger_db_path, check_same_thread=False)
-
-        # Redis for nonce checking
-        self.redis = redis.Redis(
-            host=REDIS_HOST,
-            port=REDIS_PORT,
-            decode_responses=True
+        self.ledger_conn = sqlite3.connect(
+            ledger_db_path,
+            check_same_thread=False
         )
+
+        self.redis_available = False
+
         try:
+            self.redis = redis.Redis(
+                host=REDIS_HOST,
+                port=REDIS_PORT,
+                decode_responses=True
+            )
+
             self.redis.ping()
+
+            self.redis_available = True
+
             print('\033[92m[ROGUE] Redis connected ✅\033[0m')
             logger.info('Redis connected')
-        except redis.ConnectionError:
-            print('\033[91m[ROGUE] Redis connection failed\033[0m')
-            raise
 
-        logger.info('RogueDetector initialised — ledger=%s', ledger_db_path)
+        except Exception as e:
+            self.redis = None
+            self.redis_available = False
+
+            print(
+                f'\033[93m[ROGUE] Redis connection failed: {e} '
+                f'— using in-memory mode ⚠️\033[0m'
+            )
+            logger.warning(
+                'Redis unavailable, using in-memory mode: %s',
+                str(e)
+            )
+
+        logger.info(
+            'RogueDetector initialised — ledger=%s',
+            ledger_db_path
+        )
+
         print('\033[92m[ROGUE] Detector online\033[0m')
 
     def _is_nonce_used(self, nonce: str) -> bool:
-        key = f'nonce:{nonce}'
-        existing = self.redis.get(key)
-        if existing is None:
+        """
+        If Redis is unavailable, skip replay detection.
+        This keeps the application running on Render
+        without requiring a Redis service.
+        """
+
+        if not self.redis_available:
             return False
-        return hmac.compare_digest(nonce.encode(), existing.encode())
+
+        try:
+            key = f'nonce:{nonce}'
+            existing = self.redis.get(key)
+
+            if existing is None:
+                return False
+
+            return hmac.compare_digest(
+                nonce.encode(),
+                existing.encode()
+            )
+
+        except Exception as e:
+            logger.warning(
+                'Redis lookup failed, bypassing replay check: %s',
+                str(e)
+            )
+            return False
 
     def _get_ledger_entry(self, command_hash: str):
         return self.ledger_conn.execute(
-            'SELECT id, ml_dsa_sig_hex, ed25519_sig_hex, nonce FROM commands WHERE command_hash = ?',
+            '''
+            SELECT id,
+                   ml_dsa_sig_hex,
+                   ed25519_sig_hex,
+                   nonce
+            FROM commands
+            WHERE command_hash = ?
+            ''',
             (command_hash,)
         ).fetchone()
 
@@ -66,24 +117,48 @@ class RogueDetector:
 
         with self.lock:
             self.ledger_conn.execute(
-                'INSERT INTO alerts (timestamp, alert_type, detail, severity) VALUES (?, ?, ?, ?)',
+                '''
+                INSERT INTO alerts
+                (timestamp, alert_type, detail, severity)
+                VALUES (?, ?, ?, ?)
+                ''',
                 (ts, alert_type, detail, severity)
             )
             self.ledger_conn.commit()
 
-        logger.warning('Alert fired — type=%s severity=%s detail=%s', alert_type, severity, detail)
+        logger.warning(
+            'Alert fired — type=%s severity=%s detail=%s',
+            alert_type,
+            severity,
+            detail
+        )
 
         if severity == 'critical':
-            print(f'\033[91m[ROGUE] CRITICAL ALERT: {alert_type} — {detail}\033[0m')
+            print(
+                f'\033[91m[ROGUE] CRITICAL ALERT: '
+                f'{alert_type} — {detail}\033[0m'
+            )
         else:
-            print(f'\033[93m[ROGUE] ALERT: {alert_type} — {detail}\033[0m')
+            print(
+                f'\033[93m[ROGUE] ALERT: '
+                f'{alert_type} — {detail}\033[0m'
+            )
 
-        return {'alert_type': alert_type, 'severity': severity, 'detail': detail, 'timestamp': ts}
+        return {
+            'alert_type': alert_type,
+            'severity': severity,
+            'detail': detail,
+            'timestamp': ts
+        }
 
-    def check_command(self, command_hash: str, ml_dsa_sig_hex: str = None,
-                      ed25519_sig_hex: str = None, nonce: str = None) -> dict:
+    def check_command(
+        self,
+        command_hash: str,
+        ml_dsa_sig_hex: str = None,
+        ed25519_sig_hex: str = None,
+        nonce: str = None
+    ) -> dict:
 
-        # 1. No signature at all
         if not ml_dsa_sig_hex and not ed25519_sig_hex:
             alert = self.fire_alert(
                 'UNSIGNED_COMMAND',
@@ -91,7 +166,6 @@ class RogueDetector:
             )
             return {'valid': False, **alert}
 
-        # 2. Replay attack — nonce already used
         if nonce and self._is_nonce_used(nonce):
             alert = self.fire_alert(
                 'REPLAY_ATTACK',
@@ -99,8 +173,8 @@ class RogueDetector:
             )
             return {'valid': False, **alert}
 
-        # 3. Not in ledger
         entry = self._get_ledger_entry(command_hash)
+
         if entry is None:
             alert = self.fire_alert(
                 'UNKNOWN_COMMAND',
@@ -108,31 +182,60 @@ class RogueDetector:
             )
             return {'valid': False, **alert}
 
-        # 4. Signature mismatch
         entry_id, ledger_ml_dsa, ledger_ed25519, ledger_nonce = entry
 
-        ml_dsa_match  = hmac.compare_digest(ml_dsa_sig_hex.encode(),  ledger_ml_dsa.encode())
-        ed25519_match = hmac.compare_digest(ed25519_sig_hex.encode(), ledger_ed25519.encode())
+        ml_dsa_match = hmac.compare_digest(
+            ml_dsa_sig_hex.encode(),
+            ledger_ml_dsa.encode()
+        )
+
+        ed25519_match = hmac.compare_digest(
+            ed25519_sig_hex.encode(),
+            ledger_ed25519.encode()
+        )
 
         if not ml_dsa_match or not ed25519_match:
             alert = self.fire_alert(
                 'SIGNATURE_MISMATCH',
-                f'cmd_hash={command_hash[:16]} ledger_id={entry_id} '
-                f'ml_dsa_ok={ml_dsa_match} ed25519_ok={ed25519_match}'
+                f'cmd_hash={command_hash[:16]} '
+                f'ledger_id={entry_id} '
+                f'ml_dsa_ok={ml_dsa_match} '
+                f'ed25519_ok={ed25519_match}'
             )
+
             return {'valid': False, **alert}
 
-        logger.info('Command verified clean — cmd_hash=%s ledger_id=%d', command_hash[:16], entry_id)
-        print(f'\033[92m[ROGUE] Command clean — cmd_hash={command_hash[:16]}... ledger_id={entry_id}\033[0m')
+        logger.info(
+            'Command verified clean — cmd_hash=%s ledger_id=%d',
+            command_hash[:16],
+            entry_id
+        )
+
+        print(
+            f'\033[92m[ROGUE] Command clean — '
+            f'cmd_hash={command_hash[:16]}... '
+            f'ledger_id={entry_id}\033[0m'
+        )
+
         return {
-            'valid':      True,
+            'valid': True,
             'alert_type': None,
-            'severity':   None,
-            'ledger_id':  entry_id,
+            'severity': None,
+            'ledger_id': entry_id,
         }
 
     def close(self):
-        self.ledger_conn.close()
-        self.redis.close()
-        logger.info('RogueDetector connections closed')
-        print('\033[92m[ROGUE] Detector closed\033[0m')
+        try:
+            self.ledger_conn.close()
+
+            if self.redis_available and self.redis:
+                self.redis.close()
+
+            logger.info('RogueDetector connections closed')
+            print('\033[92m[ROGUE] Detector closed\033[0m')
+
+        except Exception as e:
+            logger.warning(
+                'Error while closing RogueDetector: %s',
+                str(e)
+            )
