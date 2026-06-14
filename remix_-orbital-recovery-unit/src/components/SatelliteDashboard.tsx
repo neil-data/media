@@ -344,8 +344,8 @@ export default function SatelliteDashboard() {
       if (!wsConnected) return;
 
       console.log("[WS Dashboard] Connecting to backend...");
-      wsTelemetry = new WebSocket("ws://localhost:8000/ws/telemetry");
-      wsEvents = new WebSocket("ws://localhost:8000/ws/events");
+      wsTelemetry = new WebSocket("wss://media-3-vw51.onrender.com/ws/telemetry");
+      wsEvents = new WebSocket("wss://media-3-vw51.onrender.com/ws/events");
 
       wsTelemetry.onmessage = (event) => {
         try {

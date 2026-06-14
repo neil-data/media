@@ -121,7 +121,7 @@ export default function OperatorControlPanel() {
     ];
 
     function connect() {
-      wsEvents = new WebSocket("ws://localhost:8000/ws/events");
+      wsEvents = new WebSocket("wss://media-3-vw51.onrender.com/ws/events");
 
       wsEvents.onmessage = (event) => {
         try {
@@ -264,7 +264,7 @@ export default function OperatorControlPanel() {
     if (selectedFault === 'battery_fail') backendFault = 'firmware_corruption';
     if (selectedFault === 'adcs_fail') backendFault = 'seu';
 
-    fetch("http://localhost:8000/fault/inject", {
+    fetch("https://media-3-vw51.onrender.com/fault/inject", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -298,7 +298,7 @@ export default function OperatorControlPanel() {
     if (backendFault === 'command_injection') faultLabelForAgent = "command_injection";
     if (backendFault === 'firmware_corruption') faultLabelForAgent = "firmware_corruption";
 
-    fetch("http://localhost:8000/recovery/trigger", {
+    fetch("https://media-3-vw51.onrender.com/recovery/trigger", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({

@@ -80,8 +80,8 @@ export default function App() {
     function connect() {
       console.log("[WS] Connecting to telemetry and events...");
       
-      wsTelemetry = new WebSocket("ws://localhost:8000/ws/telemetry");
-      wsEvents = new WebSocket("ws://localhost:8000/ws/events");
+      wsTelemetry = new WebSocket("wss://media-3-vw51.onrender.com/ws/telemetry");
+      wsEvents = new WebSocket("wss://media-3-vw51.onrender.com/ws/events");
 
       wsTelemetry.onmessage = (event) => {
         try {
@@ -297,7 +297,7 @@ export default function App() {
 
               <button 
                 onClick={() => {
-                  fetch("http://localhost:8000/reset", { method: "POST" })
+                  fetch("https://media-3-vw51.onrender.com/reset", { method: "POST" })
                     .catch(err => console.error("Error resetting:", err));
                   setCurrentRoute('landing');
                 }}
