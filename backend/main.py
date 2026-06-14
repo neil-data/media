@@ -196,7 +196,17 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # Include post-quantum cryptography router
 app.include_router(crypto_router)
-
+@app.get("/")
+async def root():
+    return {
+        "status": "online",
+        "project": "DeadSat Resurrection AI-2",
+        "version": "1.0.0",
+        "docs": "/docs",
+        "health": "/health",
+        "telemetry": "/telemetry",
+        "contact": "/contact"
+    }
 
 # ──────────────────────────────────────────────
 # Request Models
